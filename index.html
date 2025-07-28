@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>單字練習 V4.8 (整體貼上 + JSON 匯入匯出)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; }
+        #sidebar { width: 200px; background-color: #f0f0f0; padding: 20px; box-sizing: border-box; }
+        #sidebar button { display: block; width: 100%; margin-bottom: 10px; padding: 10px; }
+        #content { flex: 1; padding: 20px; overflow-y: auto; box-sizing: border-box; }
+        .section { margin-bottom: 20px; }
+        .toggle-header { cursor: pointer; font-weight: bold; margin-top: 20px; }
+        .word-card { border: 1px solid #ccc; border-radius: 10px; padding: 10px; margin: 10px 0; }
+        textarea { width: 100%; resize: none; overflow: hidden; }
+        .green { background-color: #d4edda; }
+        .yellow { background-color: #fff3cd; }
+        .red { background-color: #f8d7da; }
+        .hidden { display: none; }
+        .input-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .input-row input { flex: 1; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <button onclick="showSection('addWordSection')">新增單字</button>
+        <button onclick="showSection('wordListSection')">單字清單</button>
+        <button onclick="showPracticeSection()">練習區</button>
+    </div>
+    <div id="content">
+        <div id="addWordSection" class="section">
+            <h2>新增單字</h2>
+            <div class="input-row"><input type="text" id="newWord" placeholder="英文單字" /></div>
+            <div class="input-row"><input type="text" id="newMeaning" placeholder="中文意思" /></div>
+            <div class="input-row"><input type="text" id="newExample" placeholder="英文例句" /></div>
+            <div class="input-row"><input type="text" id="newExampleCn" placeholder="例句中文翻譯" /></div>
+            <button onclick="addWord()">新增</button>
+            <button onclick="window.open('https://chatgpt.com/share/68840728-6350-8006-bb18-2ae10ebc5430', '_blank')">AI範例</button>
+
+            <h3>整體貼上</h3>
+            <textarea id="bulkInput" rows="6" placeholder="貼上四行格式的內容"></textarea>
+            <button onclick="importBulkWord()">匯入</button>
+
+            <hr />
+
+            <button onclick="exportWordsJSON()">匯出 JSON 檔</button>
+            <input type="file" id="jsonImport" accept=".json" style="display:none" onchange="importWordsJSON(event)" />
+            <button onclick="document.getElementById('jsonImport').click()">匯入 JSON 檔</button>
+        </div>
+
+        <div id="wordListSection" class="section hidden">
+            <h2>單字清單</h2>
+            <div>
+                <div class="toggle-header" onclick="toggleSection('greenList')">會了 ▶</div>
+                <div id="greenList" class="hidden"></div>
+                <div class="toggle-header" onclick="toggleSection('yellowList')">不熟 ▶</div>
+                <div id="yellowList" class="hidden"></div>
+                <div class="toggle-header" onclick="toggleSection('redList')">不會 ▶</div>
+                <div id="redList" class="hidden"></div>
+            </div>
+        </div>
+
+        <div id="practiceSection" class="section hidden">
+            <h2>練習區</h2>
+            <button onclick="refreshPractice()">重新整理</button>
+            <div id="practiceArea"></div>
+        </div>
+    </div>
+
+    <input type="file" id="audioUpload" accept="audio/*" style="display:none" onchange="handleAudioUpload()" />
+
+    <script>
+        let words = JSON.parse(localStorage.getItem('words')) || [];
+        let recordingsDB;
+        let currentUploadIndex = null;
+
+        function initDB() {
+            let request = indexedDB.open('WordPracticeDB', 1);
+            request.onupgradeneeded = e => {
+                let db = e.target.result;
+                if (!db.objectStoreNames.contains('recordings')) {
+                    db.createObjectStore('recordings', { keyPath: 'word' });
+                }
+            };
+            request.onsuccess = e => {
+                recordingsDB = e.target.result;
+                renderWords();
+                refreshPractice();
+            };
+        }
+
+        function saveWords() {
+            localStorage.setItem('words', JSON.stringify(words));
+        }
+
+        function showSection(sectionId) {
+            document.querySelectorAll('#content > .section').forEach(sec => sec.classList.add('hidden'));
+            document.getElementById(sectionId).classList.remove('hidden');
+            if (sectionId === 'wordListSection') renderWords();
+        }
+
+        function showPracticeSection() {
+            showSection('practiceSection');
+            refreshPractice();
+        }
+
+        function toggleSection(id) {
+            const section = document.getElementById(id);
+            section.classList.toggle('hidden');
+            const header = section.previousElementSibling;
+            if (section.classList.contains('hidden')) {
+                header.innerHTML = header.innerHTML.replace('▼', '▶');
+            } else {
+                header.innerHTML = header.innerHTML.replace('▶', '▼');
+                adjustTextareas(section);
+            }
+        }
+
+        function adjustTextareas(parent = document) {
+            parent.querySelectorAll('textarea').forEach(t => {
+                t.style.height = 'auto';
+                t.style.height = t.scrollHeight + 'px';
+            });
+        }
+
+        function renderWords() {
+            ['greenList', 'yellowList', 'redList'].forEach(id => (document.getElementById(id).innerHTML = ''));
+            const sortedWords = words.slice().sort((a, b) => b.timestamp - a.timestamp);
+
+            sortedWords.forEach((item, index) => {
+                checkRecording(item.word, hasRecording => {
+                    const card = createWordCard(item, index, hasRecording);
+                    document.getElementById(item.level + 'List').appendChild(card);
+                    adjustTextareas();
+                });
+            });
+        }
+
+        function createWordCard(item, index, hasRecording) {
+            const card = document.createElement('div');
+            card.className = `word-card ${item.level}`;
+            const textContent = `${item.word}\n${item.meaning}\n${item.word}\n${item.word}\n\n例句：\n${item.example}\n${item.exampleCn}\n${item.example}\n${item.example}`;
+
+            card.innerHTML = `
+                <textarea readonly>${textContent}</textarea><br>
+                <button onclick="speakContent(\`${textContent}\`)">語音</button>
+                <button onclick="getTextForTTS(\`${textContent}\`)">取得語音</button>
+                <button onclick="changeLevel(${index}, 'green')">會了</button>
+                <button onclick="changeLevel(${index}, 'yellow')">不熟</button>
+                <button onclick="changeLevel(${index}, 'red')">不會</button>
+                <button onclick="showEditForm(${index})">編輯</button>
+                <button onclick="deleteWord(${index})">刪除</button>
+                <button onclick="uploadRecording(${index})">上傳錄音</button>
+                ${hasRecording
+                    ? `<button onclick="playRecording('${item.word}')">播放錄音</button>
+                       <button onclick="downloadRecording('${item.word}')">下載錄音</button>
+                       <button onclick="deleteRecording('${item.word}')">刪除錄音</button>`
+                    : ''}
+                <div id="editForm${index}" class="hidden">
+                    <div class="input-row"><input type="text" id="editWord${index}" value="${item.word}" /></div>
+                    <div class="input-row"><input type="text" id="editMeaning${index}" value="${item.meaning}" /></div>
+                    <div class="input-row"><input type="text" id="editExample${index}" value="${item.example}" /></div>
+                    <div class="input-row"><input type="text" id="editExampleCn${index}" value="${item.exampleCn}" /></div>
+                    <button onclick="saveEdit(${index}, this)">儲存</button>
+                    <button onclick="cancelEdit(${index})">取消</button>
+                </div>
+            `;
+            return card;
+        }
+
+        function importBulkWord() {
+            const input = document.getElementById('bulkInput').value.trim();
+            const lines = input.split('\n').map(line => line.trim());
+            if (lines.length === 4 && lines.every(line => line !== '')) {
+                words.push({
+                    word: lines[0],
+                    meaning: lines[1],
+                    example: lines[2],
+                    exampleCn: lines[3],
+                    level: 'red',
+                    timestamp: Date.now(),
+                });
+                saveWords();
+                renderWords();
+                document.getElementById('bulkInput').value = '';
+                alert('輸入成功');
+            } else {
+                alert('格式有誤，匯入失敗');
+            }
+        }
+
+        // JSON 匯出
+        function exportWordsJSON() {
+            if (words.length === 0) {
+                alert('沒有單字可以匯出');
+                return;
+            }
+            const content = JSON.stringify(words, null, 2);
+            const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'words_export.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // JSON 匯入
+        function importWordsJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const importedWords = JSON.parse(e.target.result);
+                    if (Array.isArray(importedWords)) {
+                        words = importedWords;
+                        saveWords();
+                        renderWords();
+                        refreshPractice();
+                        alert('匯入成功');
+                    } else {
+                        alert('JSON格式錯誤，匯入失敗');
+                    }
+                } catch {
+                    alert('讀取檔案失敗，請確認格式正確');
+                }
+                event.target.value = ''; // 清空，方便下次匯入
+            };
+            reader.readAsText(file);
+        }
+
+        function checkRecording(word, callback) {
+            const transaction = recordingsDB.transaction(['recordings'], 'readonly');
+            const store = transaction.objectStore('recordings');
+            const request = store.get(word);
+            request.onsuccess = () => callback(!!request.result);
+        }
+
+        function uploadRecording(index) {
+            currentUploadIndex = index;
+            document.getElementById('audioUpload').click();
+        }
+
+        function handleAudioUpload() {
+            const file = document.getElementById('audioUpload').files[0];
+            if (file && file.size <= 10 * 1024 * 1024) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const transaction = recordingsDB.transaction(['recordings'], 'readwrite');
+                    const store = transaction.objectStore('recordings');
+                    store.put({ word: words[currentUploadIndex].word, data: e.target.result });
+                    transaction.oncomplete = () => {
+                        renderWords();
+                        refreshPractice();
+                    };
+                };
+                reader.readAsDataURL(file);
+            } else {
+                alert('檔案太大或格式不支援');
+            }
+        }
+
+        function playRecording(word) {
+            const transaction = recordingsDB.transaction(['recordings'], 'readonly');
+            const store = transaction.objectStore('recordings');
+            const request = store.get(word);
+            request.onsuccess = function () {
+                if (request.result) {
+                    const audio = new Audio(request.result.data);
+                    audio.play();
+                }
+            };
+        }
+
+        function downloadRecording(word) {
+            const transaction = recordingsDB.transaction(['recordings'], 'readonly');
+            const store = transaction.objectStore('recordings');
+            const request = store.get(word);
+            request.onsuccess = function () {
+                if (request.result) {
+                    const a = document.createElement('a');
+                    a.href = request.result.data;
+                    a.download = `${word}.mp3`;
+                    a.click();
+                }
+            };
+        }
+
+        function deleteRecording(word) {
+            const transaction = recordingsDB.transaction(['recordings'], 'readwrite');
+            const store = transaction.objectStore('recordings');
+            store.delete(word);
+            transaction.oncomplete = () => {
+                renderWords();
+                refreshPractice();
+            };
+        }
+
+        function showEditForm(index) {
+            document.getElementById(`editForm${index}`).classList.remove('hidden');
+        }
+
+        function cancelEdit(index) {
+            document.getElementById(`editForm${index}`).classList.add('hidden');
+        }
+
+        function saveEdit(index, btn) {
+            const newWord = document.getElementById(`editWord${index}`).value.trim();
+            const newMeaning = document.getElementById(`editMeaning${index}`).value.trim();
+            const newExample = document.getElementById(`editExample${index}`).value.trim();
+            const newExampleCn = document.getElementById(`editExampleCn${index}`).value.trim();
+            if (newWord && newMeaning && newExample && newExampleCn) {
+                words[index] = { ...words[index], word: newWord, meaning: newMeaning, example: newExample, exampleCn: newExampleCn };
+                saveWords();
+                renderWords();
+                refreshPractice();
+            }
+        }
+
+        function addWord() {
+            const word = document.getElementById('newWord').value.trim();
+            const meaning = document.getElementById('newMeaning').value.trim();
+            const example = document.getElementById('newExample').value.trim();
+            const exampleCn = document.getElementById('newExampleCn').value.trim();
+            if (word && meaning && example && exampleCn) {
+                words.push({ word, meaning, example, exampleCn, level: 'red', timestamp: Date.now() });
+                saveWords();
+                renderWords();
+                document.getElementById('newWord').value = '';
+                document.getElementById('newMeaning').value = '';
+                document.getElementById('newExample').value = '';
+                document.getElementById('newExampleCn').value = '';
+            }
+        }
+
+        function deleteWord(index) {
+            words.splice(index, 1);
+            saveWords();
+            renderWords();
+        }
+
+        function changeLevel(index, level) {
+            words[index].level = level;
+            saveWords();
+            renderWords();
+        }
+
+        function getRandomWords() {
+            const greenWords = words.filter(w => w.level === 'green');
+            const yellowWords = words.filter(w => w.level === 'yellow');
+            const redWords = words.filter(w => w.level === 'red');
+
+            function getRandom(arr, count) {
+                const shuffled = arr.sort(() => 0.5 - Math.random());
+                return shuffled.slice(0, count);
+            }
+
+            return [
+                ...getRandom(greenWords, 5),
+                ...getRandom(yellowWords, 3),
+                ...getRandom(redWords, 2)
+            ];
+        }
+
+        function refreshPractice() {
+            const practiceArea = document.getElementById('practiceArea');
+            practiceArea.innerHTML = '';
+            const practiceWords = getRandomWords();
+            practiceWords.forEach((item, index) => {
+                const globalIndex = words.findIndex(w => w.word === item.word && w.meaning === item.meaning);
+                checkRecording(item.word, hasRecording => {
+                    const card = createWordCard(item, globalIndex, hasRecording);
+                    practiceArea.appendChild(card);
+                    adjustTextareas(practiceArea);
+                });
+            });
+        }
+
+        function speakContent(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            speechSynthesis.speak(utterance);
+        }
+
+        function getTextForTTS(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                window.open('https://ttsmaker.com/zh-hk', '_blank');
+            }).catch(() => {
+                alert('無法複製文字，請手動複製');
+            });
+        }
+
+        window.onload = initDB;
+    </script>
+</body>
+</html>
