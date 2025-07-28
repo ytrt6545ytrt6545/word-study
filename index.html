@@ -389,7 +389,10 @@
             });
         }
 
-        window.onload = initDB;
+ window.onload = function() {
+    initDB();
+    adjustTextareas();
+}
     </script>
 </body>
 </html>
