@@ -21,11 +21,14 @@
     </style>
 </head>
 <body>
-    <div id="sidebar">
-        <button onclick="showSection('addWordSection')">新增單字</button>
-        <button onclick="showSection('wordListSection')">單字清單</button>
-        <button onclick="showPracticeSection()">練習區</button>
-    </div>
+<div id="sidebar">
+    <button onclick="showSection('addWordSection')">新增單字</button>
+    <button onclick="showSection('wordListSection')">單字清單</button>
+    <button onclick="showPracticeSection()">練習區</button>
+    <button onclick="exportWordsJSON()">匯出 JSON 檔</button>
+    <input type="file" id="jsonImport" accept=".json" style="display:none" onchange="importWordsJSON(event)" />
+    <button onclick="document.getElementById('jsonImport').click()">匯入 JSON 檔</button>
+</div>
     <div id="content">
         <div id="addWordSection" class="section">
             <h2>新增單字</h2>
@@ -40,11 +43,7 @@
             <textarea id="bulkInput" rows="6" placeholder="貼上四行格式的內容"></textarea>
             <button onclick="importBulkWord()">匯入</button>
 
-            <hr />
-
-            <button onclick="exportWordsJSON()">匯出 JSON 檔</button>
-            <input type="file" id="jsonImport" accept=".json" style="display:none" onchange="importWordsJSON(event)" />
-            <button onclick="document.getElementById('jsonImport').click()">匯入 JSON 檔</button>
+           
         </div>
 
         <div id="wordListSection" class="section hidden">
