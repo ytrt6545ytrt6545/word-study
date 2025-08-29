@@ -149,7 +149,7 @@
             });
         }
 
-        function createWordCard(item, index, hasRecording) {
+        function createWordCard(item, index, hasRecording, isPractice = false) {
             const card = document.createElement('div');
             card.className = `word-card ${item.level}`;
             const textContent = `${item.word}\n${item.meaning}\n${item.word}\n${item.word}\n\n例句：\n${item.example}\n${item.exampleCn}\n${item.example}\n${item.example}`;
@@ -178,6 +178,7 @@
             <button onclick="saveEdit(${index}, this)">儲存</button>
             <button onclick="cancelEdit(${index})">取消</button>
         </div>
+        ${isPractice ? `<button onclick="addReviewCount(${index}, this)">複習了</button>` : ''}
     `;
             return card;
         }
@@ -386,12 +387,8 @@
             const practiceWords = getRandomWords();
             practiceWords.forEach((item, index) => {
                 const globalIndex = words.findIndex(w => w.word === item.word && w.meaning === item.meaning);
-                // 累加複習次數
-                if (globalIndex !== -1) {
-                    words[globalIndex].reviewCount = (words[globalIndex].reviewCount || 0) + 1;
-                }
                 checkRecording(item.word, hasRecording => {
-                    const card = createWordCard(item, globalIndex, hasRecording);
+                    const card = createWordCard(item, globalIndex, hasRecording, true); // 傳入 true 顯示複習按鈕
                     practiceArea.appendChild(card);
                     adjustTextareas(practiceArea);
                 });
