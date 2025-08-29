@@ -171,7 +171,7 @@
             const card = document.createElement('div');
             card.className = `word-card ${item.level}`;
             // 顯示：英文單字 / 翻譯 / 例句 / 例句翻譯 / 例句 / 例句（例句重複兩次）
-            const textContent = `${item.word}\n${item.meaning}\n\n例句：\n${item.example}\n${item.exampleCn}\n${item.example}\n${item.example}`;
+            const textContent = `${item.word}\n${item.meaning}\n${item.word}\n${item.word}\n例句：\n${item.example}\n${item.exampleCn}\n${item.example}\n${item.example}`;
 
             // 重要：如果有合法 index，優先從最新的 words[index].reviewCount 取得數值（避免顯示過時的資料）
             const displayCount = (Number.isInteger(index) && index >= 0 && words[index]) ? (words[index].reviewCount || 0) : (item.reviewCount || 0);
