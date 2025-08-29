@@ -152,10 +152,10 @@
         function createWordCard(item, index, hasRecording, isPractice = false) {
             const card = document.createElement('div');
             card.className = `word-card ${item.level}`;
-            const textContent = `${item.word}\n${item.meaning}\n${item.word}\n${item.word}\n\n例句：\n${item.example}\n${item.exampleCn}\n${item.example}\n${item.example}`;
+            const textContent = `${item.word}\n${item.meaning}\n\n例句：\n${item.example}\n${item.exampleCn}`;
 
             card.innerHTML = `
-        <div>複習次數：${item.reviewCount || 0}</div>
+        <div class="review-count">複習次數：${item.reviewCount || 0}</div>
         <textarea readonly>${textContent}</textarea><br>
         <button onclick="speakContent(\`${textContent}\`)">語音</button>
         <button onclick="getTextForTTS(\`${textContent}\`)">取得語音</button>
@@ -165,19 +165,8 @@
         <button onclick="showEditForm(${index})">編輯</button>
         <button onclick="deleteWord(${index})">刪除</button>
         <button onclick="uploadRecording(${index})">上傳錄音</button>
-        ${hasRecording
-            ? `<button onclick="playRecording('${item.word}')">播放錄音</button>
-               <button onclick="downloadRecording('${item.word}')">下載錄音</button>
-               <button onclick="deleteRecording('${item.word}')">刪除錄音</button>`
-            : ''}
-        <div id="editForm${index}" class="hidden">
-            <div class="input-row"><input type="text" id="editWord${index}" value="${item.word}" /></div>
-            <div class="input-row"><input type="text" id="editMeaning${index}" value="${item.meaning}" /></div>
-            <div class="input-row"><input type="text" id="editExample${index}" value="${item.example}" /></div>
-            <div class="input-row"><input type="text" id="editExampleCn${index}" value="${item.exampleCn}" /></div>
-            <button onclick="saveEdit(${index}, this)">儲存</button>
-            <button onclick="cancelEdit(${index})">取消</button>
-        </div>
+        ${hasRecording ? `<button onclick="playRecording('${item.word}')">播放錄音</button>` : ''}
+        <div id="editForm${index}" class="hidden"></div>
         ${isPractice ? `<button onclick="addReviewCount(${index}, this)">複習了</button>` : ''}
     `;
             return card;
@@ -385,15 +374,15 @@
             const practiceArea = document.getElementById('practiceArea');
             practiceArea.innerHTML = '';
             const practiceWords = getRandomWords();
-            practiceWords.forEach((item, index) => {
-                const globalIndex = words.findIndex(w => w.word === item.word && w.meaning === item.meaning);
+            practiceWords.forEach(item => {
+                const globalIndex = words.findIndex(w => w === item || (w.word===item.word && w.meaning===item.meaning));
                 checkRecording(item.word, hasRecording => {
-                    const card = createWordCard(item, globalIndex, hasRecording, true); // 傳入 true 顯示複習按鈕
+                    const card = createWordCard(item, globalIndex, hasRecording, true); // isPractice = true
                     practiceArea.appendChild(card);
                     adjustTextareas(practiceArea);
                 });
             });
-            saveWords();
+            // 不自動增加 reviewCount，按鈕按下時才會增加
         }
 
         function speakContent(text) {
