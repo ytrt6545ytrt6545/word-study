@@ -361,19 +361,22 @@
         }
 
         function getRandomWords() {
+            function getSortedByReview(arr, count) {
+                // 依複習次數由小到大排序，取前 count 個
+                return arr
+                    .slice()
+                    .sort((a, b) => (a.reviewCount || 0) - (b.reviewCount || 0))
+                    .slice(0, count);
+            }
+
             const greenWords = words.filter(w => w.level === 'green');
             const yellowWords = words.filter(w => w.level === 'yellow');
             const redWords = words.filter(w => w.level === 'red');
 
-            function getRandom(arr, count) {
-                const shuffled = arr.sort(() => 0.5 - Math.random());
-                return shuffled.slice(0, count);
-            }
-
             return [
-                ...getRandom(greenWords, 5),
-                ...getRandom(yellowWords, 3),
-                ...getRandom(redWords, 2)
+                ...getSortedByReview(greenWords, 5),
+                ...getSortedByReview(yellowWords, 3),
+                ...getSortedByReview(redWords, 2)
             ];
         }
 
