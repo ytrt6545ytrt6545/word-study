@@ -155,29 +155,30 @@
             const textContent = `${item.word}\n${item.meaning}\n${item.word}\n${item.word}\n\n例句：\n${item.example}\n${item.exampleCn}\n${item.example}\n${item.example}`;
 
             card.innerHTML = `
-                <textarea readonly>${textContent}</textarea><br>
-                <button onclick="speakContent(\`${textContent}\`)">語音</button>
-                <button onclick="getTextForTTS(\`${textContent}\`)">取得語音</button>
-                <button onclick="changeLevel(${index}, 'green')">會了</button>
-                <button onclick="changeLevel(${index}, 'yellow')">不熟</button>
-                <button onclick="changeLevel(${index}, 'red')">不會</button>
-                <button onclick="showEditForm(${index})">編輯</button>
-                <button onclick="deleteWord(${index})">刪除</button>
-                <button onclick="uploadRecording(${index})">上傳錄音</button>
-                ${hasRecording
-                    ? `<button onclick="playRecording('${item.word}')">播放錄音</button>
-                       <button onclick="downloadRecording('${item.word}')">下載錄音</button>
-                       <button onclick="deleteRecording('${item.word}')">刪除錄音</button>`
-                    : ''}
-                <div id="editForm${index}" class="hidden">
-                    <div class="input-row"><input type="text" id="editWord${index}" value="${item.word}" /></div>
-                    <div class="input-row"><input type="text" id="editMeaning${index}" value="${item.meaning}" /></div>
-                    <div class="input-row"><input type="text" id="editExample${index}" value="${item.example}" /></div>
-                    <div class="input-row"><input type="text" id="editExampleCn${index}" value="${item.exampleCn}" /></div>
-                    <button onclick="saveEdit(${index}, this)">儲存</button>
-                    <button onclick="cancelEdit(${index})">取消</button>
-                </div>
-            `;
+        <div>複習次數：${item.reviewCount || 0}</div>
+        <textarea readonly>${textContent}</textarea><br>
+        <button onclick="speakContent(\`${textContent}\`)">語音</button>
+        <button onclick="getTextForTTS(\`${textContent}\`)">取得語音</button>
+        <button onclick="changeLevel(${index}, 'green')">會了</button>
+        <button onclick="changeLevel(${index}, 'yellow')">不熟</button>
+        <button onclick="changeLevel(${index}, 'red')">不會</button>
+        <button onclick="showEditForm(${index})">編輯</button>
+        <button onclick="deleteWord(${index})">刪除</button>
+        <button onclick="uploadRecording(${index})">上傳錄音</button>
+        ${hasRecording
+            ? `<button onclick="playRecording('${item.word}')">播放錄音</button>
+               <button onclick="downloadRecording('${item.word}')">下載錄音</button>
+               <button onclick="deleteRecording('${item.word}')">刪除錄音</button>`
+            : ''}
+        <div id="editForm${index}" class="hidden">
+            <div class="input-row"><input type="text" id="editWord${index}" value="${item.word}" /></div>
+            <div class="input-row"><input type="text" id="editMeaning${index}" value="${item.meaning}" /></div>
+            <div class="input-row"><input type="text" id="editExample${index}" value="${item.example}" /></div>
+            <div class="input-row"><input type="text" id="editExampleCn${index}" value="${item.exampleCn}" /></div>
+            <button onclick="saveEdit(${index}, this)">儲存</button>
+            <button onclick="cancelEdit(${index})">取消</button>
+        </div>
+    `;
             return card;
         }
 
@@ -337,7 +338,7 @@
             const example = document.getElementById('newExample').value.trim();
             const exampleCn = document.getElementById('newExampleCn').value.trim();
             if (word && meaning && example && exampleCn) {
-                words.push({ word, meaning, example, exampleCn, level: 'red', timestamp: Date.now() });
+                words.push({ word, meaning, example, exampleCn, level: 'red', timestamp: Date.now(), reviewCount: 0 });
                 saveWords();
                 renderWords();
                 document.getElementById('newWord').value = '';
@@ -382,12 +383,17 @@
             const practiceWords = getRandomWords();
             practiceWords.forEach((item, index) => {
                 const globalIndex = words.findIndex(w => w.word === item.word && w.meaning === item.meaning);
+                // 累加複習次數
+                if (globalIndex !== -1) {
+                    words[globalIndex].reviewCount = (words[globalIndex].reviewCount || 0) + 1;
+                }
                 checkRecording(item.word, hasRecording => {
                     const card = createWordCard(item, globalIndex, hasRecording);
                     practiceArea.appendChild(card);
                     adjustTextareas(practiceArea);
                 });
             });
+            saveWords();
         }
 
         function speakContent(text) {
