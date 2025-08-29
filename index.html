@@ -522,6 +522,56 @@
             });
         }
 
+ // 上傳錄音：設定要上傳的單字索引並開啟檔案選擇器
+function uploadRecording(index) {
+    currentUploadIndex = index;
+    document.getElementById('audioUpload').value = '';
+    document.getElementById('audioUpload').click();
+}
+
+// 處理上傳檔案並儲存到 IndexedDB（以 dataURL 儲存）
+function handleAudioUpload(evt) {
+    evt = evt || window.event;
+    const file = (evt.target && evt.target.files && evt.target.files[0]) || document.getElementById('audioUpload').files[0];
+    if (!file) return;
+    if (currentUploadIndex === null || currentUploadIndex === undefined || !words[currentUploadIndex]) {
+        alert('找不到對應的單字索引，請重新選擇上傳目標。');
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const dataUrl = e.target.result;
+        const wordKey = words[currentUploadIndex].word;
+        const transaction = recordingsDB.transaction(['recordings'], 'readwrite');
+        const store = transaction.objectStore('recordings');
+        store.put({ word: wordKey, data: dataUrl });
+        transaction.oncomplete = function () {
+            // 更新 UI
+            renderWords();
+            refreshPractice();
+            // 若正在聽力區，重新載入
+            try { loadListeningWords(); } catch (_) {}
+            alert('上傳完成');
+            currentUploadIndex = null;
+            document.getElementById('audioUpload').value = '';
+        };
+        transaction.onerror = function () {
+            alert('儲存錄音失敗');
+            currentUploadIndex = null;
+        };
+    };
+    reader.onerror = function () {
+        alert('讀取檔案失敗');
+    };
+    reader.readAsDataURL(file);
+}
+
+// 播放單一錄音（wrapper，方便在不同地方呼叫）
+async function playRecording(word) {
+    if (!recordingsDB) return;
+    await playRecordingPromise(word);
+}
+
  window.onload = function() {
     initDB();
     adjustTextareas();
