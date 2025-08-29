@@ -48,6 +48,7 @@
 
         <div id="wordListSection" class="section hidden">
             <h2>單字清單</h2>
+            <input type="text" id="searchInput" placeholder="搜尋英文或中文" oninput="renderWords()" />
             <div>
                 <div class="toggle-header" onclick="toggleSection('greenList')">會了 ▶</div>
                 <div id="greenList" class="hidden"></div>
@@ -129,11 +130,19 @@
 
         function renderWords() {
             ['greenList', 'yellowList', 'redList'].forEach(id => (document.getElementById(id).innerHTML = ''));
-            const sortedWords = words.slice().sort((a, b) => b.timestamp - a.timestamp);
+            const search = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+            let filteredWords = words;
+            if (search) {
+                filteredWords = words.filter(item =>
+                    item.word.toLowerCase().includes(search) ||
+                    item.meaning.toLowerCase().includes(search)
+                );
+            }
+            const sortedWords = filteredWords.slice().sort((a, b) => b.timestamp - a.timestamp);
 
             sortedWords.forEach((item, index) => {
                 checkRecording(item.word, hasRecording => {
-                    const card = createWordCard(item, index, hasRecording);
+                    const card = createWordCard(item, words.indexOf(item), hasRecording);
                     document.getElementById(item.level + 'List').appendChild(card);
                     adjustTextareas();
                 });
