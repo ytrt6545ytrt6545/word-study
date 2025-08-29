@@ -114,10 +114,16 @@
             }
         }
 
+        
         function adjustTextareas(parent = document) {
             parent.querySelectorAll('textarea').forEach(t => {
-                t.style.height = 'auto';
-                t.style.height = t.scrollHeight + 'px';
+             // 空白的不處理，保留 rows 預設高度
+             if (!t.value || t.value.trim() === '') {
+               t.style.height = ''; // 清掉 JS 設定，交給 rows
+               return;
+              }
+              t.style.height = 'auto';
+              t.style.height = t.scrollHeight + 'px';
             });
         }
 
