@@ -25,6 +25,7 @@
     <button onclick="showSection('addWordSection')">新增單字</button>
     <button onclick="showSection('wordListSection')">單字清單</button>
     <button onclick="showPracticeSection()">練習區</button>
+    <button onclick="showSection('listeningSection')">聽力區</button>
     <button onclick="exportWordsJSON()">匯出 JSON 檔</button>
     <input type="file" id="jsonImport" accept=".json" style="display:none" onchange="importWordsJSON(event)" />
     <button onclick="document.getElementById('jsonImport').click()">匯入 JSON 檔</button>
@@ -63,6 +64,23 @@
             <h2>練習區</h2>
             <button onclick="refreshPractice()">重新整理</button>
             <div id="practiceArea"></div>
+        </div>
+
+        <!-- 新增：聽力區 -->
+        <div id="listeningSection" class="section hidden">
+            <h2>聽力區</h2>
+            <div style="display:flex; gap:20px; align-items:flex-start;">
+                <div style="width:240px;">
+                    <div style="margin-bottom:10px;">
+                        <button onclick="loadListeningWords()">隨機選 5 個有錄音的單字</button>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <button id="playAllBtn" onclick="playAllSelected()" disabled>播放全部</button>
+                    </div>
+                    <div style="color:#666; font-size:13px;">備註：需先上傳錄音才會被選入</div>
+                </div>
+                <div id="listeningRight" style="flex:1;"></div>
+            </div>
         </div>
     </div>
 
@@ -241,40 +259,118 @@
             request.onsuccess = () => callback(!!request.result);
         }
 
-        function uploadRecording(index) {
-            currentUploadIndex = index;
-            document.getElementById('audioUpload').click();
+        // 新增：回傳 Promise 的非同步檢查 (方便一次拿到多個結果)
+        function checkRecordingAsync(word) {
+            return new Promise((resolve) => {
+                const transaction = recordingsDB.transaction(['recordings'], 'readonly');
+                const store = transaction.objectStore('recordings');
+                const request = store.get(word);
+                request.onsuccess = () => resolve(!!request.result);
+                request.onerror = () => resolve(false);
+            });
         }
 
-        function handleAudioUpload() {
-            const file = document.getElementById('audioUpload').files[0];
-            if (file && file.size <= 10 * 1024 * 1024) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    const transaction = recordingsDB.transaction(['recordings'], 'readwrite');
-                    const store = transaction.objectStore('recordings');
-                    store.put({ word: words[currentUploadIndex].word, data: e.target.result });
-                    transaction.oncomplete = () => {
-                        renderWords();
-                        refreshPractice();
-                    };
+        // 取得最多 count 個隨機有錄音的單字（非同步）
+        async function getRandomRecordedWords(count = 5) {
+            const candidates = [];
+            // 同步檢查所有 words 是否有錄音
+            for (let w of words) {
+                if (!w.word) continue;
+                const has = await checkRecordingAsync(w.word);
+                if (has) candidates.push(w);
+            }
+            if (candidates.length === 0) return [];
+            // 隨機打散並取前 count
+            for (let i = candidates.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+            }
+            return candidates.slice(0, count);
+        }
+
+        // 載入並顯示右欄的單字卡（最多 5 個）
+        async function loadListeningWords() {
+            const right = document.getElementById('listeningRight');
+            right.innerHTML = '載入中...';
+            const list = await getRandomRecordedWords(5);
+            right.innerHTML = '';
+            if (!list || list.length === 0) {
+                right.innerHTML = '<div>找不到有錄音的單字，請先在單字清單上傳錄音。</div>';
+                document.getElementById('playAllBtn').disabled = true;
+                return;
+            }
+            // 儲存目前播放列表到 DOM dataset
+            right.dataset.playlist = JSON.stringify(list.map(w => w.word));
+            document.getElementById('playAllBtn').disabled = false;
+
+            list.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = 'word-card ' + item.level;
+                div.style.display = 'flex';
+                div.style.gap = '10px';
+                div.style.alignItems = 'center';
+                div.innerHTML = `
+                    <div style="flex:1">
+                        <div><strong>${item.word}</strong> <span style="color:#666">(${item.meaning || ''})</span></div>
+                        <div style="font-size:13px; color:#444">複習次數：${item.reviewCount || 0}</div>
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center">
+                        <button onclick="playSingleSequential('${item.word}', this)">▶ 播放</button>
+                    </div>
+                `;
+                right.appendChild(div);
+            });
+        }
+
+        // 以 Promise 回傳播放結束事件
+        function playRecordingPromise(word) {
+            return new Promise((resolve, reject) => {
+                const transaction = recordingsDB.transaction(['recordings'], 'readonly');
+                const store = transaction.objectStore('recordings');
+                const request = store.get(word);
+                request.onsuccess = function () {
+                    if (request.result) {
+                        const audio = new Audio(request.result.data);
+                        audio.onended = () => resolve();
+                        audio.onerror = () => resolve(); // 不讓錯誤阻斷整個序列
+                        audio.play().catch(() => resolve());
+                    } else {
+                        resolve();
+                    }
                 };
-                reader.readAsDataURL(file);
+                request.onerror = () => resolve();
+            });
+        }
+
+        // 個別按鍵播放（同時把按鍵 disable 以防重複按）
+        async function playSingleSequential(word, btn) {
+            if (!recordingsDB) return;
+            if (btn) {
+                btn.disabled = true;
+                const orig = btn.innerText;
+                btn.innerText = '播放中...';
+                await playRecordingPromise(word);
+                btn.innerText = orig;
+                btn.disabled = false;
             } else {
-                alert('檔案太大或格式不支援');
+                await playRecordingPromise(word);
             }
         }
 
-        function playRecording(word) {
-            const transaction = recordingsDB.transaction(['recordings'], 'readonly');
-            const store = transaction.objectStore('recordings');
-            const request = store.get(word);
-            request.onsuccess = function () {
-                if (request.result) {
-                    const audio = new Audio(request.result.data);
-                    audio.play();
-                }
-            };
+        // 依序播放右欄的播放清單
+        async function playAllSelected() {
+            const right = document.getElementById('listeningRight');
+            const playAllBtn = document.getElementById('playAllBtn');
+            if (!right.dataset.playlist) return;
+            const list = JSON.parse(right.dataset.playlist);
+            playAllBtn.disabled = true;
+            const origText = playAllBtn.innerText;
+            playAllBtn.innerText = '播放中...';
+            for (let w of list) {
+                await playRecordingPromise(w);
+            }
+            playAllBtn.innerText = origText;
+            playAllBtn.disabled = false;
         }
 
         function downloadRecording(word) {
@@ -343,35 +439,35 @@
             saveWords();
             renderWords();
         }
-// ...existing code...
-function addReviewCount(index, btn) {
-    // 嘗試用傳入的 index，如果不合法就從卡片內容找對應的單字再比對
-    let idx = Number.isInteger(index) ? index : parseInt(index, 10);
-    if (isNaN(idx) || idx < 0 || idx >= words.length) {
-        const card = btn && btn.closest && btn.closest('.word-card');
-        const textarea = card ? card.querySelector('textarea') : null;
-        const wordText = textarea ? textarea.value.split('\n')[0].trim() : null;
-        if (wordText) {
-            idx = words.findIndex(w => w.word === wordText);
-        }
-    }
-    if (idx === -1 || idx === undefined) return;
 
-    words[idx].reviewCount = (words[idx].reviewCount || 0) + 1;
-    saveWords();
+        function addReviewCount(index, btn) {
+            // 嘗試用傳入的 index，如果不合法就從卡片內容找對應的單字再比對
+            let idx = Number.isInteger(index) ? index : parseInt(index, 10);
+            if (isNaN(idx) || idx < 0 || idx >= words.length) {
+                const card = btn && btn.closest && btn.closest('.word-card');
+                const textarea = card ? card.querySelector('textarea') : null;
+                const wordText = textarea ? textarea.value.split('\n')[0].trim() : null;
+                if (wordText) {
+                    idx = words.findIndex(w => w.word === wordText);
+                }
+            }
+            if (idx === -1 || idx === undefined) return;
 
-    // 更新該卡片上的顯示（避免整頁重新 render）
-    if (btn) {
-        const card = btn.closest('.word-card');
-        if (card) {
-            const countEl = card.querySelector('.review-count');
-            if (countEl) countEl.textContent = `複習次數：${words[idx].reviewCount}`;
-            btn.disabled = true;
-            btn.innerText = '已複習';
+            words[idx].reviewCount = (words[idx].reviewCount || 0) + 1;
+            saveWords();
+
+            // 更新該卡片上的顯示（避免整頁重新 render）
+            if (btn) {
+                const card = btn.closest('.word-card');
+                if (card) {
+                    const countEl = card.querySelector('.review-count');
+                    if (countEl) countEl.textContent = `複習次數：${words[idx].reviewCount}`;
+                    btn.disabled = true;
+                    btn.innerText = '已複習';
+                }
+            }
         }
-    }
-}
-// ...existing code...
+
         function changeLevel(index, level) {
             words[index].level = level;
             saveWords();
