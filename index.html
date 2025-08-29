@@ -343,7 +343,35 @@
             saveWords();
             renderWords();
         }
+// ...existing code...
+function addReviewCount(index, btn) {
+    // 嘗試用傳入的 index，如果不合法就從卡片內容找對應的單字再比對
+    let idx = Number.isInteger(index) ? index : parseInt(index, 10);
+    if (isNaN(idx) || idx < 0 || idx >= words.length) {
+        const card = btn && btn.closest && btn.closest('.word-card');
+        const textarea = card ? card.querySelector('textarea') : null;
+        const wordText = textarea ? textarea.value.split('\n')[0].trim() : null;
+        if (wordText) {
+            idx = words.findIndex(w => w.word === wordText);
+        }
+    }
+    if (idx === -1 || idx === undefined) return;
 
+    words[idx].reviewCount = (words[idx].reviewCount || 0) + 1;
+    saveWords();
+
+    // 更新該卡片上的顯示（避免整頁重新 render）
+    if (btn) {
+        const card = btn.closest('.word-card');
+        if (card) {
+            const countEl = card.querySelector('.review-count');
+            if (countEl) countEl.textContent = `複習次數：${words[idx].reviewCount}`;
+            btn.disabled = true;
+            btn.innerText = '已複習';
+        }
+    }
+}
+// ...existing code...
         function changeLevel(index, level) {
             words[index].level = level;
             saveWords();
