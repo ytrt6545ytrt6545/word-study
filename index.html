@@ -27,8 +27,10 @@
     <button onclick="showPracticeSection()">練習區</button>
     <button onclick="showSection('listeningSection')">聽力區</button>
     <button onclick="exportWordsJSON()">匯出 JSON 檔</button>
+    <button onclick="uploadToDrive()">匯出到 Google 雲端硬碟</button>
     <input type="file" id="jsonImport" accept=".json" style="display:none" onchange="importWordsJSON(event)" />
     <button onclick="document.getElementById('jsonImport').click()">匯入 JSON 檔</button>
+    <button onclick="openPicker()">從 Google 雲端硬碟匯入</button>
 </div>
     <div id="content">
         <div id="addWordSection" class="section">
