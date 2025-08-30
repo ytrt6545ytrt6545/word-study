@@ -86,6 +86,105 @@
 
     <input type="file" id="audioUpload" accept="audio/*" style="display:none" onchange="handleAudioUpload()" />
 
+    <!-- Google API -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script>
+        // 已填入你提供的值
+        const G_CLIENT_ID = '1074436980143-lmevkkht7ujhqvb9re944e0uph246nrd.apps.googleusercontent.com';
+        const G_API_KEY = 'AIzaSyAIVty3_WUyxhmHgtUPgIEr1y5Ji_Ax7gE';
+        const G_APP_ID = 'word-study-470600';
+        const G_SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
+
+        let gapiInited = false;
+        let pickerInited = false;
+
+        function gapiLoad() {
+            if (window.gapi) {
+                gapi.load('client:auth2', onGapiClientLoad);
+                gapi.load('picker', () => { pickerInited = true; });
+            } else {
+                console.warn('gapi 未載入');
+            }
+        }
+
+        async function onGapiClientLoad() {
+            try {
+                await gapi.client.init({ apiKey: G_API_KEY, clientId: G_CLIENT_ID, scope: G_SCOPES });
+                gapiInited = true;
+            } catch (e) {
+                console.error('gapi init failed', e);
+            }
+        }
+
+        // 匯出到 Google Drive（會跳出登入視窗）
+        async function uploadToDrive() {
+            if (!gapiInited) { alert('Google API 尚未就緒，請稍後再試'); return; }
+            const auth = gapi.auth2.getAuthInstance();
+            try {
+                if (!auth.isSignedIn.get()) await auth.signIn();
+            } catch (e) { alert('授權失敗'); return; }
+            const content = JSON.stringify(words || [], null, 2);
+            const metadata = { name: 'words_export.json', mimeType: 'application/json' };
+            const boundary = '-------314159265358979323846';
+            const delimiter = "\r\n--" + boundary + "\r\n";
+            const closeDelim = "\r\n--" + boundary + "--";
+            const multipartRequestBody =
+                delimiter +
+                'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+                JSON.stringify(metadata) +
+                delimiter +
+                'Content-Type: application/json\r\n\r\n' +
+                content +
+                closeDelim;
+            try {
+                const resp = await gapi.client.request({
+                    path: '/upload/drive/v3/files',
+                    method: 'POST',
+                    params: { uploadType: 'multipart' },
+                    headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
+                    body: multipartRequestBody
+                });
+                alert('已上傳到 Google 雲端硬碟: ' + (resp.result && resp.result.name));
+            } catch (err) {
+                console.error(err);
+                alert('上傳失敗，請檢查授權與網路');
+            }
+        }
+
+        // Picker 選檔並匯入
+        function openPicker() {
+            if (!gapiInited || !pickerInited) { alert('Google API 尚未就緒，請稍後再試'); return; }
+            const auth = gapi.auth2.getAuthInstance();
+            auth.signIn().then(() => {
+                const token = auth.currentUser.get().getAuthResponse().access_token;
+                const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+                    .setMimeTypes('application/json')
+                    .setMode(google.picker.DocsViewMode.LIST);
+                const picker = new google.picker.PickerBuilder()
+                    .setAppId(G_APP_ID)
+                    .setOAuthToken(token)
+                    .addView(view)
+                    .addView(new google.picker.DocsUploadView())
+                    .setCallback(pickerCallback)
+                    .build();
+                picker.setVisible(true);
+            }).catch(() => alert('授權失敗'));
+        }
+
+        async function pickerCallback(data) {
+            if (data.action === google.picker.Action.PICKED) {
+                const fileId = data.docs[0].id;
+                try {
+                    const res = await gapi.client.request({ path: `/drive/v3/files/${fileId}`, method: 'GET', params: { alt: 'media' } });
+                    importWordsJSONFromText(res.body || res.result || JSON.stringify(res));
+                } catch (e) {
+                    console.error(e);
+                    alert('讀取雲端檔案失敗');
+                }
+            }
+        }
+    </script>
+
     <script>
         let words = JSON.parse(localStorage.getItem('words')) || [];
         let recordingsDB;
@@ -578,6 +677,7 @@ async function playRecording(word) {
  window.onload = function() {
     initDB();
     adjustTextareas();
+    try { gapiLoad(); } catch (e) { /* ignore */ }
 }
     </script>
 </body>
