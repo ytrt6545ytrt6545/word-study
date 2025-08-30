@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- 新增：允許 Google API / Picker 所需的外部來源（必須在載入 apis.google.com 前） -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self' data: blob:;
+        script-src 'self' https://apis.google.com https://accounts.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval' data: blob:;
+        connect-src 'self' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com;
+        img-src 'self' data: https://www.gstatic.com;
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        frame-src https://accounts.google.com https://*.google.com https://docs.google.com https://ytrt6545ytrt6545.github.io;
+    ">
     <meta charset="UTF-8" />
     <title>單字練習 V4.8 (整體貼上 + JSON 匯入匯出)</title>
     <style>
