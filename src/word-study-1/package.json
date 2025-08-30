@@ -1,0 +1,31 @@
+{
+  "name": "word-study",
+  "version": "1.0.0",
+  "description": "A web application for studying vocabulary with features for adding, practicing, and listening to words.",
+  "main": "src/js/main.js",
+  "scripts": {
+    "start": "live-server src",
+    "build": "echo 'Build step not defined'",
+    "test": "echo 'No tests defined'"
+  },
+  "keywords": [
+    "vocabulary",
+    "study",
+    "language",
+    "education"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "live-server": "^1.2.1"
+  },
+  "devDependencies": {},
+  "homepage": "https://github.com/yourusername/word-study",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/word-study.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/word-study/issues"
+  }
+}

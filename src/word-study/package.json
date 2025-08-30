@@ -1,0 +1,29 @@
+{
+  "name": "word-study",
+  "version": "1.0.0",
+  "description": "A web application for studying vocabulary with features for adding words, practicing, and audio recordings.",
+  "main": "src/js/app.js",
+  "scripts": {
+    "start": "live-server src",
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development"
+  },
+  "dependencies": {
+    "axios": "^0.21.1",
+    "dotenv": "^10.0.0",
+    "express": "^4.17.1",
+    "mongoose": "^5.10.9"
+  },
+  "devDependencies": {
+    "webpack": "^5.24.2",
+    "webpack-cli": "^4.5.0",
+    "live-server": "^1.2.1"
+  },
+  "keywords": [
+    "vocabulary",
+    "study",
+    "education"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
