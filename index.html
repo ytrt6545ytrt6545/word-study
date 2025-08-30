@@ -144,9 +144,10 @@
                 gapiInited = true;
                console.log('gapi.client.init success');
             } catch (e) {
-                console.error('gapi init failed', e);
-               // 顯示更友善的提示
-               alert('Google API 初始化失敗，請檢查 API Key / Client ID / OAuth 設定，並在 Console 查看錯誤訊息。');
+               console.error('gapi init failed', e);
+               // 暴露詳細錯誤便於除錯
+               window.__lastGapiInitError = e;
+               alert('Google API 初始化失敗，請檢查 API Key / Client ID / OAuth 設定，並在 Console 查看錯誤訊息（或貼上 window.__lastGapiInitError）。');
             }
         }
 
