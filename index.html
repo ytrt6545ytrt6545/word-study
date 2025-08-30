@@ -27,6 +27,9 @@
         .hidden { display: none; }
         .input-row { display: flex; gap: 10px; margin-bottom: 10px; }
         .input-row input { flex: 1; }
+        /* Hide removed cloud drive actions */
+        #sidebar button[onclick*="uploadToDrive"],
+        #sidebar button[onclick*="openPicker"] { display: none; }
     </style>
 </head>
 <body>
@@ -97,8 +100,7 @@
 
     <input type="file" id="audioUpload" accept="audio/*" style="display:none" onchange="handleAudioUpload()" />
 
-    <!-- Google API / Drive + Picker -->
-    <script src="https://apis.google.com/js/api.js"></script>
+    <!-- Removed Google API / Drive + Picker integration
     <script>
         // Google API 設定（已填入 Client ID / API Key，G_APP_ID 改為 numeric project number）
         const G_CLIENT_ID = '1074436980143';
@@ -239,7 +241,7 @@
 
         // 啟動 gapi（在 window.onload 也可呼叫）
         try { gapiLoad(); } catch (e) { /* ignore */ }
-     </script>
+     -->
 
     <script>
         let words = JSON.parse(localStorage.getItem('words')) || [];
