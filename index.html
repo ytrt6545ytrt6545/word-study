@@ -736,6 +736,66 @@ async function playRecording(word) {
     initDB();
     adjustTextareas();
 }
+
+// Override: multi-entry bulk import (4 lines per item, blank line separated)
+function importBulkWord() {
+    const ta = document.getElementById('bulkInput');
+    const input = (ta && ta.value ? ta.value : '').replace(/\r\n/g, '\n').trim();
+    if (!input) { alert('沒有內容可匯入'); return; }
+
+    const blocks = input.split(/\n\s*\n+/); // separated by blank lines
+    let imported = 0;
+    let skipped = 0;
+    const now = Date.now();
+
+    blocks.forEach(block => {
+        const lines = block.split('\n').map(s => s.trim()).filter(Boolean);
+        if (lines.length === 4) {
+            const [word, meaning, example, exampleCn] = lines;
+            words.push({ word, meaning, example, exampleCn, level: 'red', timestamp: now, reviewCount: 0 });
+            imported++;
+        } else if (lines.length > 0) {
+            skipped++;
+        }
+    });
+
+    if (imported > 0) {
+        saveWords();
+        renderWords();
+        if (ta) { ta.value = ''; autoResizeBulk(); }
+    }
+
+    if (imported === 0) {
+        alert('格式不符：未匯入任何單字');
+    } else if (skipped > 0) {
+        alert(`已匯入 ${imported} 筆；跳過 ${skipped} 筆（需每筆4行）`);
+    } else {
+        alert(`已匯入 ${imported} 筆`);
+    }
+}
+
+// Auto-resize bulk textarea to fit content
+function autoResizeBulk() {
+    const t = document.getElementById('bulkInput');
+    if (!t) return;
+    if (!t.value || t.value.trim() === '') {
+        t.style.height = '';
+        return;
+    }
+    t.style.height = 'auto';
+    t.style.height = t.scrollHeight + 'px';
+}
+
+// Wire up placeholder hint and auto-resize on load
+window.addEventListener('load', () => {
+    const t = document.getElementById('bulkInput');
+    if (t) {
+        try { t.placeholder = '多筆匯入：每筆四行（單字、中文、例句、例句中文），以空白行分隔'; } catch (_) {}
+        t.addEventListener('input', autoResizeBulk);
+        autoResizeBulk();
+    }
+});
+
     </script>
 </body>
 </html>
