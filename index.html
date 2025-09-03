@@ -55,8 +55,19 @@
             <button onclick="window.open('https://chatgpt.com/share/68840728-6350-8006-bb18-2ae10ebc5430', '_blank')">AI範例</button>
 
             <h3>整體貼上</h3>
-            <textarea id="bulkInput" rows="6" placeholder="貼上四行格式的內容"></textarea>
+            <textarea id="bulkInput" rows="6" placeholder="貼上四行格式的內容" oninput="autoResizeBulk()"></textarea>
             <button onclick="importBulkWord()">匯入</button>
+
+            <div style="margin-top:12px; padding:10px; border:1px dashed #ccc; border-radius:8px;">
+                <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="autoTTS" />
+                    <span>新增/匯入時自動產生語音</span>
+                </label>
+                <div class="input-row" style="margin-top:8px;">
+                    <input type="text" id="ttsApiUrl" placeholder="TTS 後端 API URL（例如 https://你的網域/api/tts）" />
+                </div>
+                <small>提示：此功能需後端產生 MP3，網址請填你的 TTS 端點。</small>
+            </div>
 
            
         </div>
@@ -247,6 +258,70 @@
         let words = JSON.parse(localStorage.getItem('words')) || [];
         let recordingsDB;
         let currentUploadIndex = null;
+        let ttsSettings = { auto: false, apiUrl: '' };
+
+        function loadTTSSettings() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('ttsSettings'));
+                if (saved && typeof saved === 'object') ttsSettings = { auto: !!saved.auto, apiUrl: saved.apiUrl || '' };
+            } catch (_) {}
+            const autoEl = document.getElementById('autoTTS');
+            const urlEl = document.getElementById('ttsApiUrl');
+            if (autoEl) autoEl.checked = !!ttsSettings.auto;
+            if (urlEl) urlEl.value = ttsSettings.apiUrl || '';
+        }
+
+        function saveTTSSettings() {
+            const autoEl = document.getElementById('autoTTS');
+            const urlEl = document.getElementById('ttsApiUrl');
+            ttsSettings.auto = !!(autoEl && autoEl.checked);
+            ttsSettings.apiUrl = (urlEl && urlEl.value ? urlEl.value.trim() : '');
+            localStorage.setItem('ttsSettings', JSON.stringify(ttsSettings));
+        }
+
+        function setupTTSSettingBindings() {
+            const autoEl = document.getElementById('autoTTS');
+            const urlEl = document.getElementById('ttsApiUrl');
+            if (autoEl) autoEl.addEventListener('change', saveTTSSettings);
+            if (urlEl) urlEl.addEventListener('change', saveTTSSettings);
+        }
+
+        function guessLangFromText(text) {
+            // 極簡判斷：含英文字母 -> en-US，否則 zh-TW
+            return /[a-zA-Z]/.test(text || '') ? 'en-US' : 'zh-TW';
+        }
+
+        async function generateAndStoreTTS(word, text) {
+            try {
+                if (!ttsSettings || !ttsSettings.auto) return;
+                if (!ttsSettings.apiUrl) return; // 未設定端點則略過
+                const payload = { text: text || word, lang: guessLangFromText(text || word), voice: '' };
+                const resp = await fetch(ttsSettings.apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!resp.ok) throw new Error('TTS API 回應失敗');
+                const blob = await resp.blob();
+                // 轉為 dataURL 並存進 IndexedDB（與上傳流程一致）
+                await new Promise((resolve, reject) => {
+                    const fr = new FileReader();
+                    fr.onload = () => {
+                        const dataUrl = fr.result;
+                        const transaction = recordingsDB.transaction(['recordings'], 'readwrite');
+                        const store = transaction.objectStore('recordings');
+                        store.put({ word, data: dataUrl });
+                        transaction.oncomplete = () => { resolve(); };
+                        transaction.onerror = () => { resolve(); };
+                    };
+                    fr.onerror = reject;
+                    fr.readAsDataURL(blob);
+                });
+                // 不吵使用者；下次 render/listening 會顯示已錄音
+            } catch (e) {
+                console.warn('自動產生語音失敗：', e);
+            }
+        }
 
         function initDB() {
             let request = indexedDB.open('WordPracticeDB', 1);
@@ -591,6 +666,8 @@
                 document.getElementById('newMeaning').value = '';
                 document.getElementById('newExample').value = '';
                 document.getElementById('newExampleCn').value = '';
+                // 嘗試自動產生語音（只念單字即可）
+                generateAndStoreTTS(word, word);
             }
         }
 
@@ -735,7 +812,9 @@ async function playRecording(word) {
  window.onload = function() {
     initDB();
     adjustTextareas();
-}
+    loadTTSSettings();
+    setupTTSSettingBindings();
+ }
 
 // Override: multi-entry bulk import (4 lines per item, blank line separated)
 function importBulkWord() {
@@ -754,6 +833,8 @@ function importBulkWord() {
             const [word, meaning, example, exampleCn] = lines;
             words.push({ word, meaning, example, exampleCn, level: 'red', timestamp: now, reviewCount: 0 });
             imported++;
+            // 背景嘗試自動產生語音（不阻塞匯入）
+            try { generateAndStoreTTS(word, word); } catch (_) {}
         } else if (lines.length > 0) {
             skipped++;
         }
