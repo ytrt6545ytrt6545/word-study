@@ -263,8 +263,12 @@
         function loadTTSSettings() {
             try {
                 const saved = JSON.parse(localStorage.getItem('ttsSettings'));
-                if (saved && typeof saved === 'object') ttsSettings = { auto: !!saved.auto, apiUrl: saved.apiUrl || '' };
-            } catch (_) {}
+                let url = (saved && typeof saved === 'object' && saved.apiUrl) ? saved.apiUrl : '';
+                if (!url) url = '/api/tts'; // default to local server endpoint
+                ttsSettings = { auto: !!(saved && saved.auto), apiUrl: url };
+            } catch (_) {
+                ttsSettings = { auto: false, apiUrl: '/api/tts' };
+            }
             const autoEl = document.getElementById('autoTTS');
             const urlEl = document.getElementById('ttsApiUrl');
             if (autoEl) autoEl.checked = !!ttsSettings.auto;
