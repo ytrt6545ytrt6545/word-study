@@ -1,14 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <!-- 新增：允許 Google API / Picker 所需的外部來源（必須在載入 apis.google.com 前） -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self' data: blob:;
-        script-src 'self' https://apis.google.com https://accounts.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval' data: blob:;
-        connect-src 'self' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com;
-        img-src 'self' data: https://www.gstatic.com;
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:;
+        connect-src 'self';
+        img-src 'self' data:;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-        frame-src https://accounts.google.com https://*.google.com https://docs.google.com https://ytrt6545ytrt6545.github.io;
+        frame-src https://ytrt6545ytrt6545.github.io;
     ">
     <meta charset="UTF-8" />
     <title>單字練習 V4.8 (整體貼上 + JSON 匯入匯出)</title>
@@ -27,9 +27,7 @@
         .hidden { display: none; }
         .input-row { display: flex; gap: 10px; margin-bottom: 10px; }
         .input-row input { flex: 1; }
-        /* Hide removed cloud drive actions */
-        #sidebar button[onclick*="uploadToDrive"],
-        #sidebar button[onclick*="openPicker"] { display: none; }
+        
     </style>
 </head>
 <body>
@@ -39,10 +37,8 @@
     <button onclick="showPracticeSection()">練習區</button>
     <button onclick="showSection('listeningSection')">聽力區</button>
     <button onclick="exportWordsJSON()">匯出 JSON 檔</button>
-    <button onclick="uploadToDrive()">匯出到 Google 雲端硬碟</button>
     <input type="file" id="jsonImport" accept=".json" style="display:none" onchange="importWordsJSON(event)" />
     <button onclick="document.getElementById('jsonImport').click()">匯入 JSON 檔</button>
-    <button onclick="openPicker()">從 Google 雲端硬碟匯入</button>
 </div>
     <div id="content">
         <div id="addWordSection" class="section">
@@ -58,7 +54,7 @@
             <textarea id="bulkInput" rows="6" placeholder="貼上四行格式的內容" oninput="autoResizeBulk()"></textarea>
             <button onclick="importBulkWord()">匯入</button>
 
-            <div style="margin-top:12px; padding:10px; border:1px dashed #ccc; border-radius:8px;">
+            <div style="display:none; margin-top:12px; padding:10px; border:1px dashed #ccc; border-radius:8px;">
                 <label style="display:flex; align-items:center; gap:8px;">
                     <input type="checkbox" id="autoTTS" />
                     <span>新增/匯入時自動產生語音</span>
@@ -110,149 +106,6 @@
     </div>
 
     <input type="file" id="audioUpload" accept="audio/*" style="display:none" onchange="handleAudioUpload()" />
-
-    <!-- Removed Google API / Drive + Picker integration
-    <script>
-        // Google API 設定（已填入 Client ID / API Key，G_APP_ID 改為 numeric project number）
-        const G_CLIENT_ID = '1074436980143';
-        const G_API_KEY = 'AIzaSyAIVty3_WUyxhmHgtUPgIEr1y5Ji_Ax7gE';
-        const G_APP_ID = 'word-study-470600'; // <- 用 Google Cloud Console 的 Project number (純數字)
-        const G_SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
-
-        let gapiInited = false;
-        let pickerInited = false;
-
-        // 等待 gapi 與 client init 完成（最多 timeoutMs 毫秒）
-        function waitForGapiInit(timeoutMs = 8000) {
-            return new Promise((resolve) => {
-                const start = Date.now();
-                const tryInit = () => {
-                    if (gapiInited) return resolve(true);
-                    if (window.gapi && !gapiInited) {
-                        try { gapiLoad(); } catch (e) { console.warn('gapiLoad failed', e); }
-                    }
-                    if (Date.now() - start > timeoutMs) {
-                        console.error('gapi init timeout');
-                        return resolve(false);
-                    }
-                    setTimeout(tryInit, 200);
-                };
-                tryInit();
-            });
-        }
-
-        function gapiLoad() {
-            if (window.gapi) {
-                gapi.load('client:auth2', onGapiClientLoad);
-                gapi.load('picker', () => { pickerInited = true; console.log('picker loaded'); });
-               console.log('gapi.load called');
-            } else {
-                console.warn('gapi 未載入');
-            }
-        }
-
-        async function onGapiClientLoad() {
-            try {
-                await gapi.client.init({ apiKey: G_API_KEY, clientId: G_CLIENT_ID, scope: G_SCOPES });
-                gapiInited = true;
-               console.log('gapi.client.init success');
-            } catch (e) {
-               console.error('gapi init failed', e);
-               // 暴露詳細錯誤便於除錯
-               window.__lastGapiInitError = e;
-               alert('Google API 初始化失敗，請檢查 API Key / Client ID / OAuth 設定，並在 Console 查看錯誤訊息（或貼上 window.__lastGapiInitError）。');
-            }
-        }
-
-        // 匯出：建立一個 JSON 檔案到使用者 Drive（會跳出登入/授權視窗）
-        async function uploadToDrive() {
-            const ready = await waitForGapiInit();
-            if (!ready) { alert('Google API 尚未就緒，請稍後或查看 Console'); return; }
-             const auth = gapi.auth2.getAuthInstance();
-             try {
-                 if (!auth.isSignedIn.get()) await auth.signIn(); // popup 登入
-             } catch (e) { alert('授權失敗'); return; }
-             const content = JSON.stringify(words || [], null, 2);
-             const metadata = { name: 'words_export.json', mimeType: 'application/json' };
-             const boundary = '-------314159265358979323846';
-             const delimiter = "\r\n--" + boundary + "\r\n";
-             const closeDelim = "\r\n--" + boundary + "--";
-             const multipartRequestBody =
-                 delimiter +
-                 'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-                 JSON.stringify(metadata) +
-                 delimiter +
-                 'Content-Type: application/json\r\n\r\n' +
-                 content +
-                 closeDelim;
-             try {
-                 const resp = await gapi.client.request({
-                     path: '/upload/drive/v3/files',
-                     method: 'POST',
-                     params: { uploadType: 'multipart' },
-                     headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
-                     body: multipartRequestBody
-                 });
-                 alert('已上傳到 Google 雲端硬碟: ' + (resp.result && resp.result.name));
-             } catch (err) {
-                 console.error(err);
-                 alert('上傳失敗，請檢查授權與 API 設定');
-             }
-         }
- 
-         // 匯入：用 Picker 讓使用者選取 .json，再讀取內容匯入
-         async function openPicker() {
-            const ready = await waitForGapiInit();
-            if (!ready || !pickerInited) { alert('Google API / Picker 尚未就緒，請稍後或查看 Console'); return; }
-             const auth = gapi.auth2.getAuthInstance();
-             auth.signIn().then(() => {
-                 const token = auth.currentUser.get().getAuthResponse().access_token;
-                 const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
-                     .setMimeTypes('application/json')
-                     .setMode(google.picker.DocsViewMode.LIST);
-                 const picker = new google.picker.PickerBuilder()
-                     .setAppId(G_APP_ID)
-                     .setOAuthToken(token)
-                     .addView(view)
-                     .addView(new google.picker.DocsUploadView())
-                     .setCallback(pickerCallback)
-                     .build();
-                 picker.setVisible(true);
-             }).catch(() => alert('授權失敗'));
-         }
-
-        async function pickerCallback(data) {
-            if (data.action === google.picker.Action.PICKED) {
-                const fileId = data.docs[0].id;
-                try {
-                    const res = await gapi.client.request({ path: `/drive/v3/files/${fileId}`, method: 'GET', params: { alt: 'media' } });
-                    importWordsJSONFromText(res.body || res.result || JSON.stringify(res));
-                } catch (e) {
-                    console.error(e);
-                    alert('讀取雲端檔案失敗');
-                }
-            }
-        }
-
-        // 複用現有匯入邏輯：從文字匯入
-        function importWordsJSONFromText(text) {
-            try {
-                const imported = JSON.parse(text);
-                if (Array.isArray(imported)) {
-                    words = imported;
-                    saveWords();
-                    renderWords();
-                    refreshPractice();
-                    alert('從 Google 雲端匯入成功');
-                    return;
-                }
-            } catch (e) { /* noop */ }
-            alert('匯入失敗，檔案格式錯誤');
-        }
-
-        // 啟動 gapi（在 window.onload 也可呼叫）
-        try { gapiLoad(); } catch (e) { /* ignore */ }
-     -->
 
     <script>
         let words = JSON.parse(localStorage.getItem('words')) || [];
@@ -671,7 +524,7 @@
                 document.getElementById('newExample').value = '';
                 document.getElementById('newExampleCn').value = '';
                 // 嘗試自動產生語音（只念單字即可）
-                generateAndStoreTTS(word, word);
+                
             }
         }
 
@@ -816,8 +669,8 @@ async function playRecording(word) {
  window.onload = function() {
     initDB();
     adjustTextareas();
-    loadTTSSettings();
-    setupTTSSettingBindings();
+    
+    
  }
 
 // Override: multi-entry bulk import (4 lines per item, blank line separated)
@@ -838,7 +691,7 @@ function importBulkWord() {
             words.push({ word, meaning, example, exampleCn, level: 'red', timestamp: now, reviewCount: 0 });
             imported++;
             // 背景嘗試自動產生語音（不阻塞匯入）
-            try { generateAndStoreTTS(word, word); } catch (_) {}
+            
         } else if (lines.length > 0) {
             skipped++;
         }
